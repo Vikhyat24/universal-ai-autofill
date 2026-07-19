@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Autofill Demo Playground</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 30px auto; padding: 0 16px; color: #222; }
+    fieldset { margin: 18px 0; border: 1px solid #ccc; border-radius: 10px; padding: 16px; }
+    legend { font-weight: 700; padding: 0 6px; }
+    label { display: block; font-size: 13px; margin: 10px 0 3px; font-weight: 600; }
+    input, select, textarea { width: 100%; padding: 7px 9px; border: 1px solid #bbb; border-radius: 7px; font: inherit; box-sizing: border-box; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+    .note { color: #777; font-size: 12.5px; }
+    button { margin-top: 14px; padding: 9px 16px; border-radius: 8px; border: none; background: #444; color: #fff; }
+  </style>
+</head>
+<body>
+  <h1>⚡ Autofill Demo Playground</h1>
+  <p class="note">Load the extension, open this file, and try the floating button / Alt+Shift+F / right-click menu. The submit button only logs — nothing is sent anywhere.</p>
+
+  <form id="standard" onsubmit="event.preventDefault(); console.log('submitted (blocked)');">
+    <fieldset>
+      <legend>Standard labels</legend>
+      <div class="grid">
+        <div><label for="fn">First Name</label><input id="fn" name="first_name" autocomplete="given-name" /></div>
+        <div><label for="ln">Last Name</label><input id="ln" name="last_name" autocomplete="family-name" /></div>
+        <div><label for="em">Email Address</label><input id="em" type="email" name="email" /></div>
+        <div><label for="ph">Phone Number</label><input id="ph" type="tel" name="phone" /></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Hostile / unusual naming (semantic matching test)</legend>
+      <div class="grid">
+        <div><label for="h1">Candidate Mail</label><input id="h1" name="candidate_mail" /></div>
+        <div><label for="h2">Your Good Name</label><input id="h2" name="applicantName" /></div>
+        <div><label for="h3">Contact No.</label><input id="h3" name="contactno" /></div>
+        <div><label for="h4">Passing Year</label><input id="h4" name="yop" placeholder="Passing year" /></div>
+        <div><label for="h5">Current CTC</label><input id="h5" name="ctc" /></div>
+        <div><label for="h6">Alma Mater</label><input id="h6" name="institution" /></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Address (placeholder-only, no labels)</legend>
+      <div class="grid">
+        <div><input name="addr1" placeholder="Street Address" /></div>
+        <div><input name="addr2" placeholder="Apt / Suite" /></div>
+        <div><input name="cty" placeholder="City" /></div>
+        <div><input name="st" placeholder="State / Province" /></div>
+        <div><input name="pc" placeholder="PIN Code" /></div>
+        <div>
+          <select name="country_sel">
+            <option>-- Country --</option>
+            <option>India</option>
+            <option>United States</option>
+            <option>United Kingdom</option>
+            <option>Germany</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Other control types</legend>
+      <label>Date of Birth</label><input type="date" name="dob" />
+      <label>Gender</label>
+      <label style="font-weight:400"><input type="radio" name="g" value="male" style="width:auto" /> Male</label>
+      <label style="font-weight:400"><input type="radio" name="g" value="female" style="width:auto" /> Female</label>
+      <label style="font-weight:400"><input type="radio" name="g" value="na" style="width:auto" /> Prefer not to say</label>
+      <label>About yourself</label><textarea name="bio" rows="3" placeholder="Tell us about yourself"></textarea>
+      <label>LinkedIn Profile</label><input name="li_url" />
+      <label>GitHub</label><input name="gh" />
+    </fieldset>
+
+    <fieldset>
+      <legend>Dynamically added (appears after 2s — MutationObserver test)</legend>
+      <div id="dyn" class="note">loading…</div>
+    </fieldset>
+
+    <button type="submit">Submit (no-op)</button>
+  </form>
+
+  <script>
+    setTimeout(() => {
+      document.getElementById('dyn').innerHTML =
+        '<label for="dyn1">Work Email</label><input id="dyn1" name="workEmail" />' +
+        '<label for="dyn2">Company Name</label><input id="dyn2" name="employer" />' +
+        '<label for="dyn3">Job Title</label><input id="dyn3" name="designation" />';
+    }, 2000);
+  </script>
+</body>
+</html>

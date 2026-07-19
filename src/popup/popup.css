@@ -1,0 +1,54 @@
+body { width: 340px; min-height: 320px; }
+
+.pp { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Black nav bar, like the Chain360 header */
+.pp-header {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--black); color: #fff;
+  border-radius: var(--radius); padding: 11px 13px;
+}
+.pp-header .logo { font-size: 18px; color: var(--lime); }
+.pp-header h1 { font-size: 14.5px; font-weight: 700; flex: 1; letter-spacing: 0.02em; }
+.pp-header .gear { background: none; padding: 4px 7px; font-size: 15px; color: #fff; }
+.pp-header .badge { background: var(--lime); color: var(--black); }
+
+.pp-profile { padding: 11px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pp-profile label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+
+.pp-actions { display: flex; flex-direction: column; gap: 8px; }
+.pp-actions .big {
+  padding: 13px; font-size: 14.5px; font-weight: 700; border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.pp-actions .duo { display: flex; gap: 8px; }
+.pp-actions .duo button {
+  flex: 1; font-size: 12.5px; background: var(--panel);
+  border: 1px solid var(--border); font-weight: 600;
+}
+
+.pp-status {
+  font-size: 12px; text-align: center; min-height: 16px;
+  background: var(--panel); border-radius: 6px; padding: 6px 8px;
+}
+.pp-status.ok { color: var(--ok); }
+.pp-status.err { color: var(--warn); }
+
+.pp-section h2 { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--black); margin-bottom: 6px; opacity: .75; }
+[data-theme='dark'] .pp-section h2 { color: var(--muted); }
+.pp-recent { display: flex; flex-direction: column; gap: 4px; max-height: 130px; overflow-y: auto; }
+.pp-recent .item {
+  display: flex; justify-content: space-between; gap: 8px; font-size: 12px;
+  padding: 6px 10px; border-radius: 6px; background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pp-recent .item .host { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pp-foot { display: flex; gap: 6px; }
+.pp-foot button {
+  flex: 1; font-size: 12px; padding: 8px 6px; background: var(--black);
+  color: #fff; font-weight: 600;
+}
+.pp-foot button:hover { color: var(--lime); filter: none; }
+
+.pp-empty { text-align: center; padding: 14px 10px 16px; font-size: 12.5px; color: var(--muted); }
