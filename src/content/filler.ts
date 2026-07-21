@@ -106,6 +106,45 @@ export function fillElement(el: FillableElement, value: string): boolean {
   }
 }
 
+/** Snapshot of a control's state, used to undo a fill. */
+export interface ElementSnapshot {
+  value: string;
+  checked: boolean;
+  selectedIndex: number;
+}
+
+export function captureElement(el: FillableElement): ElementSnapshot {
+  return {
+    value: 'value' in el ? el.value : '',
+    checked: el instanceof HTMLInputElement ? el.checked : false,
+    selectedIndex: el instanceof HTMLSelectElement ? el.selectedIndex : -1,
+  };
+}
+
+/** Restore a previously captured state (undo). Returns true if anything changed. */
+export function restoreElement(el: FillableElement, snap: ElementSnapshot): boolean {
+  try {
+    if (el instanceof HTMLSelectElement) {
+      if (el.selectedIndex === snap.selectedIndex) return false;
+      el.selectedIndex = snap.selectedIndex;
+      fireEvents(el);
+      return true;
+    }
+    if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
+      if (el.checked === snap.checked) return false;
+      el.checked = snap.checked;
+      fireEvents(el);
+      return true;
+    }
+    if (el.value === snap.value) return false;
+    setNativeValue(el as HTMLInputElement | HTMLTextAreaElement, snap.value);
+    fireEvents(el);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Brief highlight so the user sees what changed. */
 export function flashElement(el: HTMLElement): void {
   const prevOutline = el.style.outline;

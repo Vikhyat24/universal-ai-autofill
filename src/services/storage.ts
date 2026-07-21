@@ -7,7 +7,7 @@
  *   implement the same StorageBackend interface without touching callers.
  */
 import { STORAGE_KEYS, DEFAULT_SETTINGS, MAX_RECENT_FORMS } from '@/shared/constants';
-import type { Profile, Settings, LearnedMapping, RecentForm, BackupPayload } from '@/shared/types';
+import type { Profile, Settings, LearnedMapping, RecentForm, BackupPayload, FillStats } from '@/shared/types';
 import { encryptJson, decryptJson } from './crypto';
 
 // ---------------------------------------------------------------- profiles
@@ -101,21 +101,48 @@ export async function addRecentForm(entry: RecentForm): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.RECENT_FORMS]: next });
 }
 
+// ---------------------------------------------------------------- stats
+
+const EMPTY_STATS: FillStats = { totalFilled: 0, totalForms: 0, perHost: {}, firstAt: 0 };
+
+export async function getStats(): Promise<FillStats> {
+  const stored = await chrome.storage.local.get(STORAGE_KEYS.STATS);
+  return { ...EMPTY_STATS, ...((stored[STORAGE_KEYS.STATS] as Partial<FillStats>) ?? {}) };
+}
+
+/** Record a completed fill: bump totals and the per-host counter. */
+export async function recordFill(hostname: string, filled: number): Promise<void> {
+  if (filled <= 0) return;
+  const stats = await getStats();
+  stats.totalFilled += filled;
+  stats.totalForms += 1;
+  stats.perHost[hostname] = (stats.perHost[hostname] ?? 0) + filled;
+  if (!stats.firstAt) stats.firstAt = Date.now();
+  await chrome.storage.local.set({ [STORAGE_KEYS.STATS]: stats });
+}
+
+export async function clearStats(): Promise<void> {
+  await chrome.storage.local.remove(STORAGE_KEYS.STATS);
+}
+
 // ---------------------------------------------------------------- backup
 
 export async function exportBackup(): Promise<BackupPayload> {
   return {
-    version: 1,
+    version: 2,
     exportedAt: Date.now(),
     profiles: await getProfiles(),
     settings: await getSettings(),
     learned: await getLearnedMappings(),
     recentForms: await getRecentForms(),
+    stats: await getStats(),
   };
 }
 
 export async function importBackup(payload: BackupPayload): Promise<void> {
-  if (payload.version !== 1) throw new Error(`Unsupported backup version: ${payload.version}`);
+  if (payload.version !== 1 && payload.version !== 2) {
+    throw new Error(`Unsupported backup version: ${payload.version}`);
+  }
   if (!Array.isArray(payload.profiles)) throw new Error('Invalid backup: missing profiles');
   await saveProfiles(payload.profiles);
   if (payload.settings) await saveSettings({ ...DEFAULT_SETTINGS, ...payload.settings });
@@ -124,5 +151,8 @@ export async function importBackup(payload: BackupPayload): Promise<void> {
   }
   if (Array.isArray(payload.recentForms)) {
     await chrome.storage.local.set({ [STORAGE_KEYS.RECENT_FORMS]: payload.recentForms });
+  }
+  if (payload.stats) {
+    await chrome.storage.local.set({ [STORAGE_KEYS.STATS]: payload.stats });
   }
 }

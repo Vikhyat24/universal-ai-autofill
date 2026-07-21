@@ -4,6 +4,7 @@ export const STORAGE_KEYS = {
   SETTINGS: 'uaf_settings',
   LEARNED: 'uaf_learned',
   RECENT_FORMS: 'uaf_recent_forms',
+  STATS: 'uaf_stats',
   CRYPTO_META: 'uaf_crypto_meta',
 } as const;
 
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showFloatingButton: true,
   smartLearning: true,
   siteProfiles: {},
+  siteRules: {},
   encryptionEnabled: true,
 };
 

@@ -1,9 +1,9 @@
 /** Profiles tab: list, create, edit, delete profiles; manage custom fields. */
 import { useEffect, useState } from 'react';
 import type { Profile, ProfileField, FieldKind } from '@/shared/types';
-import { DEFAULT_PROFILE_KINDS, KIND_LABELS, TAXONOMY } from '@/shared/taxonomy';
+import { PROFILE_SECTIONS, KIND_LABELS, TAXONOMY } from '@/shared/taxonomy';
 import { getProfiles, upsertProfile, deleteProfile } from '@/services/storage';
-import { createEmptyProfile } from '@/services/profileService';
+import { createEmptyProfile, duplicateProfile } from '@/services/profileService';
 
 const EXAMPLES: Record<string, string> = Object.fromEntries(
   TAXONOMY.map((t) => [t.kind, t.example ?? '']),
@@ -26,7 +26,6 @@ export function ProfilesTab() {
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const select = (p: Profile) => {
@@ -38,6 +37,16 @@ export function ProfilesTab() {
     const name = prompt('Profile name (e.g. Personal, Job Applications):', 'New Profile');
     if (!name) return;
     const p = createEmptyProfile(name);
+    await upsertProfile(p);
+    await load();
+    select(p);
+  };
+
+  const cloneProfile = async () => {
+    if (!draft) return;
+    const name = prompt('Name for the duplicated profile:', `${draft.name} (copy)`);
+    if (!name) return;
+    const p = duplicateProfile(draft, name);
     await upsertProfile(p);
     await load();
     select(p);
@@ -131,21 +140,29 @@ export function ProfilesTab() {
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               placeholder="Profile name"
             />
+            <button onClick={() => void cloneProfile()}>Duplicate</button>
             <button className="danger" onClick={() => void removeProfile()}>Delete</button>
           </div>
 
-          <div className="op-fields">
-            {DEFAULT_PROFILE_KINDS.map((kind) => (
-              <div className="op-field" key={kind}>
-                <label>{KIND_LABELS[kind] ?? kind}</label>
-                <input
-                  value={valueOf(kind)}
-                  placeholder={EXAMPLES[kind] || ''}
-                  onChange={(e) => setField(kind, e.target.value)}
-                />
+          {PROFILE_SECTIONS.map((section) => (
+            <div className="op-section" key={section.title}>
+              <h4 className="op-section-title">{section.title}</h4>
+              <div className="op-fields">
+                {section.kinds.map((kind) => (
+                  <div className="op-field" key={kind}>
+                    <label>{KIND_LABELS[kind] ?? kind}</label>
+                    <input
+                      value={valueOf(kind)}
+                      placeholder={EXAMPLES[kind] || ''}
+                      onChange={(e) => setField(kind, e.target.value)}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+          ))}
 
+          <div className="op-fields">
             <div className="op-field wide">
               <label>Custom fields — matched to forms by name (e.g. “Passport Number”)</label>
               <div className="stack">

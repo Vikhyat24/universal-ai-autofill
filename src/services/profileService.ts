@@ -2,7 +2,7 @@
  * Profile domain logic: creation, value lookup with derivation, and the
  * profile→value resolver used by the autofill engine.
  */
-import type { Profile, ProfileField, FieldKind } from '@/shared/types';
+import type { Profile, ProfileField, FieldKind, Settings, SiteRuleMode } from '@/shared/types';
 import { deriveValue, DEFAULT_PROFILE_KINDS } from '@/shared/taxonomy';
 import { getProfiles, getSettings } from './storage';
 
@@ -16,6 +16,34 @@ export function createEmptyProfile(name: string, emoji = '👤'): Profile {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** Deep-copy a profile under a new id (for "Duplicate profile"). */
+export function duplicateProfile(source: Profile, name?: string): Profile {
+  const now = Date.now();
+  return {
+    id: crypto.randomUUID(),
+    name: name ?? `${source.name} (copy)`,
+    emoji: source.emoji,
+    fields: source.fields.map((f) => ({ ...f })),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Effective autofill mode for a hostname:
+ *  - explicit siteRules entry wins,
+ *  - a legacy ignoredHosts match maps to 'off',
+ *  - otherwise undefined (fall back to global settings).
+ */
+export function resolveSiteMode(settings: Settings, hostname: string): SiteRuleMode | undefined {
+  const rule = settings.siteRules?.[hostname];
+  if (rule) return rule;
+  if (settings.ignoredHosts.some((h) => hostname === h || hostname.endsWith(`.${h}`))) {
+    return 'off';
+  }
+  return undefined;
 }
 
 /** Raw value for a kind (no derivation). */

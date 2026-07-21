@@ -9,19 +9,22 @@
  *  4. Never submits forms.
  */
 import { scanFields, findFieldById, countForms, type DetectedField } from './detector';
-import { fillElement, flashElement } from './filler';
+import {
+  fillElement, flashElement, captureElement, restoreElement, type ElementSnapshot,
+} from './filler';
 import { ContentUI } from './ui';
 import { mapField, type MappingResult } from '@/services/mapping/mapper';
 import { fieldSignature } from '@/services/mapping/signals';
 import {
   getSettings, getLearnedMappings, saveLearnedMapping, addRecentForm, getProfiles, saveSettings,
-  upsertProfile,
+  upsertProfile, recordFill,
 } from '@/services/storage';
-import { pickProfile, resolveValue, customKeys } from '@/services/profileService';
+import { pickProfile, resolveValue, customKeys, resolveSiteMode } from '@/services/profileService';
 import { FILL_CONFIDENCE_THRESHOLD, MUTATION_DEBOUNCE_MS } from '@/shared/constants';
 import { KIND_LABELS } from '@/shared/taxonomy';
 import type {
   RuntimeMessage, RuntimeResponse, DetectedFieldInfo, DetectionSummary, FieldKind, Profile,
+  Settings, SiteRuleMode,
 } from '@/shared/types';
 
 interface MappedField {
@@ -38,23 +41,28 @@ class AutofillController {
   private observer: MutationObserver | null = null;
   private scanTimer: number | undefined;
   private enabled = true;
+  /** Per-site override (auto / review / off), if any. */
+  private siteMode: SiteRuleMode | undefined;
   /** fieldId → value we filled, for smart-learning change detection. */
   private filledValues = new Map<string, { value: string; kind: FieldKind; label: string }>();
   private learningHooked = new WeakSet<Element>();
+  /** Snapshot of the last fill, for undo. */
+  private lastFill: Array<{ fieldId: string; snap: ElementSnapshot }> = [];
 
   constructor() {
     this.ui = new ContentUI({
       onFill: (ids, overrides, profileId) => void this.fill({ onlyFieldIds: ids, overrides, profileId }),
       onProfileChange: (profileId) => void this.switchProfile(profileId),
       onKindCorrected: (fieldId, kind) => void this.correctKind(fieldId, kind),
+      onSaveField: (kind, customKey, value) => void this.saveFieldToProfile(kind, customKey, value),
       onDismissFab: () => (this.fabDismissed = true),
     });
   }
 
   async init(): Promise<void> {
     const settings = await getSettings();
-    const host = location.hostname;
-    if (settings.ignoredHosts.some((h) => host === h || host.endsWith(`.${h}`))) {
+    this.siteMode = resolveSiteMode(settings, location.hostname);
+    if (this.siteMode === 'off') {
       this.enabled = false;
       return;
     }
@@ -71,7 +79,7 @@ class AutofillController {
     await this.rescan();
 
     if (settings.autofillOnLoad && this.fillableCount() > 0) {
-      if (settings.confirmBeforeFill) await this.openReview();
+      if (this.confirmBefore(settings)) await this.openReview();
       else await this.fill({});
     }
 
@@ -97,9 +105,25 @@ class AutofillController {
     this.observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  /** Whether a triggered fill should open the review panel first. */
+  private confirmBefore(settings: Settings): boolean {
+    if (this.siteMode === 'review') return true;
+    if (this.siteMode === 'auto') return false;
+    return settings.confirmBeforeFill;
+  }
+
   private async rescan(): Promise<void> {
     if (!this.enabled) return;
     const [settings, learned] = await Promise.all([getSettings(), getLearnedMappings()]);
+    // Re-evaluate the per-site rule so popup toggles take effect live.
+    this.siteMode = resolveSiteMode(settings, location.hostname);
+    if (this.siteMode === 'off') {
+      this.enabled = false;
+      this.mapped = [];
+      this.ui.hideFab();
+      this.ui.closePanel();
+      return;
+    }
     this.activeProfile = await pickProfile(location.hostname);
 
     const detected = scanFields();
@@ -118,7 +142,7 @@ class AutofillController {
       return { detected: d, mapping, proposedValue };
     });
 
-    this.updateFab(settings.showFloatingButton, settings.confirmBeforeFill);
+    this.updateFab(settings.showFloatingButton, this.confirmBefore(settings));
   }
 
   private fillableCount(): number {
@@ -157,6 +181,7 @@ class AutofillController {
       confidence: m.mapping.confidence,
       proposedValue: m.proposedValue,
       currentValue: m.detected.element.value ?? '',
+      section: m.detected.signals.sectionHeading || undefined,
       signature: m.mapping.signature,
     };
   }
@@ -218,6 +243,7 @@ class AutofillController {
     }
 
     let filled = 0;
+    const snapshots: Array<{ fieldId: string; snap: ElementSnapshot }> = [];
     const targets = this.mapped.filter((m) => {
       if (opts.onlyFieldIds) return opts.onlyFieldIds.includes(m.detected.fieldId);
       return m.proposedValue && m.mapping.confidence >= FILL_CONFIDENCE_THRESHOLD;
@@ -227,8 +253,10 @@ class AutofillController {
       const value = opts.overrides?.[m.detected.fieldId] ?? m.proposedValue;
       if (!value) continue;
       const el = findFieldById(m.detected.fieldId) ?? m.detected.element;
+      const before = captureElement(el);
       if (fillElement(el, value)) {
         filled++;
+        snapshots.push({ fieldId: m.detected.fieldId, snap: before });
         flashElement(el);
         this.filledValues.set(m.detected.fieldId, {
           value,
@@ -240,7 +268,13 @@ class AutofillController {
     }
 
     if (filled > 0) {
-      this.ui.toast(`Filled ${filled} field${filled === 1 ? '' : 's'} — review before submitting.`, 'Review', () => void this.openReview());
+      this.lastFill = snapshots;
+      this.ui.toast(
+        `Filled ${filled} field${filled === 1 ? '' : 's'} — review before submitting.`,
+        'Undo',
+        () => this.undoLastFill(),
+      );
+      await recordFill(location.hostname, filled);
       await addRecentForm({
         hostname: location.hostname,
         url: location.href.split('#')[0].slice(0, 300),
@@ -252,6 +286,30 @@ class AutofillController {
       this.ui.toast('Nothing to fill — no confident matches on this page.', 'Review fields', () => void this.openReview());
     }
     return { filled, total: targets.length };
+  }
+
+  /** Restore field values captured before the most recent fill. */
+  private undoLastFill(): void {
+    let restored = 0;
+    for (const { fieldId, snap } of this.lastFill) {
+      const el = findFieldById(fieldId);
+      if (el && restoreElement(el, snap)) restored++;
+    }
+    this.lastFill = [];
+    this.ui.toast(restored ? `Reverted ${restored} field${restored === 1 ? '' : 's'}.` : 'Nothing to undo.');
+  }
+
+  /** Persist an (edited) value from the review panel back to the active profile. */
+  private async saveFieldToProfile(kind: FieldKind, customKey: string | undefined, value: string): Promise<void> {
+    if (!this.activeProfile || !value || kind === 'unknown') return;
+    const profile = this.activeProfile;
+    const existing = profile.fields.find((f) =>
+      kind === 'custom' ? f.kind === 'custom' && f.customKey === customKey : f.kind === kind,
+    );
+    if (existing) existing.value = value;
+    else profile.fields.push({ kind, customKey, value });
+    await upsertProfile(profile);
+    this.ui.toast('Saved to your profile.');
   }
 
   // ------------------------------------------------------------ learning
@@ -298,7 +356,7 @@ class AutofillController {
       }
       case 'AUTOFILL': {
         const settings = await getSettings();
-        if (settings.confirmBeforeFill && !msg.onlyFieldIds) {
+        if (this.confirmBefore(settings) && !msg.onlyFieldIds) {
           await this.openReview();
           return { ok: true, data: { filled: 0, total: 0, reviewOpened: true } };
         }

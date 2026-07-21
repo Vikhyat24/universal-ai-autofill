@@ -1,7 +1,13 @@
-/** Settings tab: behavior toggles, theme, default profile, ignored sites. */
+/** Settings tab: behavior toggles, theme, default profile, per-site rules. */
 import { useEffect, useState } from 'react';
-import type { Settings, Profile, ThemeMode } from '@/shared/types';
+import type { Settings, Profile, ThemeMode, SiteRuleMode } from '@/shared/types';
 import { getSettings, saveSettings, getProfiles } from '@/services/storage';
+
+const SITE_RULE_LABELS: Record<SiteRuleMode, string> = {
+  auto: 'Auto-fill',
+  review: 'Always review',
+  off: 'Disabled',
+};
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -41,6 +47,18 @@ export function SettingsTab({ onThemeChange }: { onThemeChange: (m: ThemeMode) =
       .filter(Boolean);
     update({ ignoredHosts: Array.from(new Set(hosts)) });
   };
+
+  const setSiteRule = (host: string, mode: SiteRuleMode) => {
+    update({ siteRules: { ...settings!.siteRules, [host]: mode } });
+  };
+
+  const removeSiteRule = (host: string) => {
+    const next = { ...settings!.siteRules };
+    delete next[host];
+    update({ siteRules: next });
+  };
+
+  const siteRuleEntries = Object.entries(settings.siteRules ?? {});
 
   return (
     <div className="op-settings">
@@ -125,6 +143,36 @@ export function SettingsTab({ onThemeChange }: { onThemeChange: (m: ThemeMode) =
           <span>AES-GCM encryption of profiles at rest (recommended, on by default).</span>
         </div>
         <Toggle checked={settings.encryptionEnabled} onChange={(v) => update({ encryptionEnabled: v })} />
+      </div>
+
+      <div className="op-set card col">
+        <div className="info">
+          <b>Per-site rules</b>
+          <span>Overrides for specific sites (set from the popup on each site). These take priority over the global behavior above.</span>
+        </div>
+        {siteRuleEntries.length === 0 ? (
+          <p className="muted" style={{ fontSize: 12.5 }}>No per-site rules yet. Open the popup on a site to add one.</p>
+        ) : (
+          <div className="stack" style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {siteRuleEntries.map(([host, mode]) => (
+              <div className="row spread" key={host}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '45%' }}>{host}</span>
+                <div className="row" style={{ gap: 8 }}>
+                  <select
+                    value={mode}
+                    onChange={(e) => setSiteRule(host, e.target.value as SiteRuleMode)}
+                    style={{ width: 'auto', minWidth: 140 }}
+                  >
+                    {(Object.keys(SITE_RULE_LABELS) as SiteRuleMode[]).map((m) => (
+                      <option key={m} value={m}>{SITE_RULE_LABELS[m]}</option>
+                    ))}
+                  </select>
+                  <button className="ghost" title="Remove" onClick={() => removeSiteRule(host)}>🗑</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="op-set card col">

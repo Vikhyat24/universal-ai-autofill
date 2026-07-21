@@ -33,6 +33,19 @@ export type FieldKind =
   | 'salary'
   | 'coverLetter'
   | 'yearsExperience'
+  // Job-application specifics
+  | 'pronouns'
+  | 'location'
+  | 'workAuthorization'
+  | 'sponsorship'
+  | 'noticePeriod'
+  | 'startDate'
+  | 'relocate'
+  | 'references'
+  // Equal-opportunity (optional, off by default)
+  | 'veteranStatus'
+  | 'disabilityStatus'
+  | 'ethnicity'
   | 'custom'
   | 'unknown';
 
@@ -68,6 +81,9 @@ export interface LearnedMapping {
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
+/** Per-site autofill behavior override. */
+export type SiteRuleMode = 'auto' | 'review' | 'off';
+
 export interface Settings {
   aiMappingEnabled: boolean;
   theme: ThemeMode;
@@ -79,7 +95,21 @@ export interface Settings {
   smartLearning: boolean;
   /** Per-hostname preferred profile. */
   siteProfiles: Record<string, string>;
+  /** Per-hostname behavior override: auto-fill / always-review / off. */
+  siteRules: Record<string, SiteRuleMode>;
   encryptionEnabled: boolean;
+}
+
+/** Aggregate usage statistics (local only). */
+export interface FillStats {
+  /** Total individual fields filled, all-time. */
+  totalFilled: number;
+  /** Total fill actions (forms) performed. */
+  totalForms: number;
+  /** Fields filled per hostname. */
+  perHost: Record<string, number>;
+  /** Timestamp of the first recorded fill. */
+  firstAt: number;
 }
 
 /** Serializable description of a detected form field (content → UI). */
@@ -99,6 +129,8 @@ export interface DetectedFieldInfo {
   proposedValue: string;
   /** Current value in the field, if any. */
   currentValue: string;
+  /** Nearest section heading / fieldset legend (for grouping in review UI). */
+  section?: string;
   /** Raw signals for debugging / learning. */
   signature: string;
 }
@@ -139,10 +171,26 @@ export interface RuntimeResponse<T = unknown> {
 
 /** Exported backup shape (versioned for forward compatibility). */
 export interface BackupPayload {
-  version: 1;
+  version: 1 | 2;
   exportedAt: number;
   profiles: Profile[];
   settings: Settings;
   learned: LearnedMapping[];
   recentForms: RecentForm[];
+  /** v2+: aggregate usage stats. */
+  stats?: FillStats;
+}
+
+/** Password-protected export envelope (AES-GCM, PBKDF2-derived key). */
+export interface EncryptedBackup {
+  format: 'uaf-encrypted';
+  v: 1;
+  /** Base64 PBKDF2 salt. */
+  salt: string;
+  /** Base64 AES-GCM iv. */
+  iv: string;
+  /** PBKDF2 iteration count. */
+  iterations: number;
+  /** Base64 ciphertext of a JSON BackupPayload. */
+  data: string;
 }

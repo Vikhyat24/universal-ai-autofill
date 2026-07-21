@@ -74,6 +74,18 @@
     </fieldset>
 
     <fieldset>
+      <legend>Job application specifics</legend>
+      <label>Pronouns</label><input name="pronouns" placeholder="she/her" />
+      <label>Current Location</label><input name="current_location" placeholder="City, State" />
+      <label>Are you legally authorized to work?</label><input name="work_auth" />
+      <label>Do you require visa sponsorship?</label><input name="need_sponsorship" />
+      <label>Notice period</label><input name="notice" />
+      <label>Earliest start date</label><input type="date" name="available_from" />
+      <label>Willing to relocate?</label><input name="relocation" />
+      <label>Expected salary</label><input name="expected_ctc" />
+    </fieldset>
+
+    <fieldset>
       <legend>Dynamically added (appears after 2s — MutationObserver test)</legend>
       <div id="dyn" class="note">loading…</div>
     </fieldset>

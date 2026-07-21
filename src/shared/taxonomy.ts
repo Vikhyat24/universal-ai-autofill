@@ -280,19 +280,147 @@ export const TAXONOMY: KindSpec[] = [
     autocomplete: [],
     example: 'I am a passionate engineer…',
   },
+  {
+    kind: 'pronouns',
+    label: 'Pronouns',
+    keywords: ['pronoun', 'pronouns'],
+    phrases: ['preferred pronouns', 'your pronouns'],
+    autocomplete: [],
+    example: 'she/her',
+  },
+  {
+    kind: 'location',
+    label: 'Current Location',
+    keywords: ['location', 'currentlocation', 'basedin', 'residence'],
+    phrases: ['current location', 'your location', 'where are you based', 'city and state', 'current city'],
+    autocomplete: [],
+    negative: ['ip', 'timezone', 'zone', 'geolocation'],
+    example: 'San Francisco, CA',
+  },
+  {
+    kind: 'workAuthorization',
+    label: 'Work Authorization',
+    keywords: ['workauthorization', 'workauthorized', 'workpermit', 'righttowork', 'workeligibility', 'employmenteligibility'],
+    phrases: ['work authorization', 'authorized to work', 'legally authorized', 'right to work', 'work eligibility', 'eligible to work', 'visa status', 'work status'],
+    autocomplete: [],
+    negative: ['sponsor', 'sponsorship'],
+    example: 'Authorized to work in the US',
+  },
+  {
+    kind: 'sponsorship',
+    label: 'Visa Sponsorship',
+    keywords: ['sponsorship', 'sponsor', 'visasponsorship'],
+    phrases: ['require sponsorship', 'need sponsorship', 'visa sponsorship', 'require visa sponsorship', 'sponsorship required', 'require immigration'],
+    autocomplete: [],
+    example: 'No',
+  },
+  {
+    kind: 'noticePeriod',
+    label: 'Notice Period',
+    keywords: ['noticeperiod', 'notice'],
+    phrases: ['notice period', 'notice days', 'how much notice'],
+    autocomplete: [],
+    example: '30 days',
+  },
+  {
+    kind: 'startDate',
+    label: 'Available Start Date',
+    keywords: ['startdate', 'availability', 'availablefrom', 'joiningdate', 'earlieststart'],
+    phrases: ['start date', 'available start date', 'availability date', 'earliest start', 'joining date', 'when can you start', 'available from', 'date available'],
+    autocomplete: [],
+    negative: ['end date', 'birth'],
+    example: '2026-08-01',
+  },
+  {
+    kind: 'relocate',
+    label: 'Willing to Relocate',
+    keywords: ['relocate', 'relocation', 'willingtorelocate'],
+    phrases: ['willing to relocate', 'open to relocation', 'able to relocate'],
+    autocomplete: [],
+    example: 'Yes',
+  },
+  {
+    kind: 'references',
+    label: 'References',
+    keywords: ['references', 'referee', 'referees', 'reference'],
+    phrases: ['professional references', 'reference contact'],
+    autocomplete: [],
+    negative: ['number', 'code', 'id', 'requisition', 'job', 'order', 'self'],
+    example: 'Available on request',
+  },
+  {
+    kind: 'veteranStatus',
+    label: 'Veteran Status',
+    keywords: ['veteran', 'veteranstatus', 'military'],
+    phrases: ['veteran status', 'protected veteran', 'military service'],
+    autocomplete: [],
+    example: 'I am not a veteran',
+  },
+  {
+    kind: 'disabilityStatus',
+    label: 'Disability Status',
+    keywords: ['disability', 'disabled', 'disabilitystatus'],
+    phrases: ['disability status', 'do you have a disability'],
+    autocomplete: [],
+    example: 'No',
+  },
+  {
+    kind: 'ethnicity',
+    label: 'Race / Ethnicity',
+    keywords: ['ethnicity', 'race', 'ethnic', 'hispanic', 'latino'],
+    phrases: ['race ethnicity', 'ethnic background', 'racial background'],
+    autocomplete: [],
+    negative: ['racing', 'trace'],
+    example: 'Prefer not to say',
+  },
 ];
 
 export const KIND_LABELS: Record<string, string> = Object.fromEntries(
   TAXONOMY.map((t) => [t.kind, t.label]),
 );
 
-/** Kinds shown by default in the profile editor, in display order. */
-export const DEFAULT_PROFILE_KINDS: FieldKind[] = [
-  'fullName', 'firstName', 'lastName', 'middleName', 'email', 'phone',
-  'addressLine1', 'addressLine2', 'city', 'state', 'country', 'zip',
-  'linkedin', 'github', 'portfolio', 'website', 'company', 'jobTitle',
-  'college', 'degree', 'graduationYear', 'dateOfBirth', 'nationality', 'gender',
+/** Profile-editor field groups, in display order. */
+export interface ProfileSection {
+  title: string;
+  kinds: FieldKind[];
+}
+
+export const PROFILE_SECTIONS: ProfileSection[] = [
+  {
+    title: 'Identity',
+    kinds: ['fullName', 'firstName', 'lastName', 'middleName', 'pronouns', 'dateOfBirth', 'gender', 'nationality'],
+  },
+  {
+    title: 'Contact',
+    kinds: ['email', 'phone', 'location'],
+  },
+  {
+    title: 'Address',
+    kinds: ['addressLine1', 'addressLine2', 'city', 'state', 'country', 'zip'],
+  },
+  {
+    title: 'Online presence',
+    kinds: ['linkedin', 'github', 'portfolio', 'website'],
+  },
+  {
+    title: 'Professional',
+    kinds: [
+      'company', 'jobTitle', 'yearsExperience', 'salary', 'noticePeriod',
+      'startDate', 'workAuthorization', 'sponsorship', 'relocate', 'references',
+    ],
+  },
+  {
+    title: 'Education',
+    kinds: ['college', 'degree', 'graduationYear'],
+  },
+  {
+    title: 'Equal opportunity (optional)',
+    kinds: ['veteranStatus', 'disabilityStatus', 'ethnicity'],
+  },
 ];
+
+/** Kinds shown by default in the profile editor, in display order. */
+export const DEFAULT_PROFILE_KINDS: FieldKind[] = PROFILE_SECTIONS.flatMap((s) => s.kinds);
 
 /** Kinds derivable from others when missing (e.g. fullName from first+last). */
 export function deriveValue(
@@ -318,6 +446,10 @@ export function deriveValue(
     }
     case 'website':
       return get('portfolio') ?? undefined;
+    case 'location': {
+      const parts = [get('city'), get('state')].filter(Boolean);
+      return parts.length ? parts.join(', ') : undefined;
+    }
     default:
       return undefined;
   }

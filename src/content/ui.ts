@@ -5,7 +5,7 @@
  * small and fast.
  */
 import { EXT_PREFIX } from '@/shared/constants';
-import { KIND_LABELS, TAXONOMY } from '@/shared/taxonomy';
+import { TAXONOMY } from '@/shared/taxonomy';
 import type { DetectedFieldInfo, Profile, FieldKind } from '@/shared/types';
 
 const CSS = `
@@ -50,7 +50,18 @@ const CSS = `
   flex: 1; background: #23212c; color: #e8e6f0; border: 1px solid #3a3846;
   border-radius: 8px; padding: 6px 8px; font-size: 12.5px;
 }
+.${EXT_PREFIX}-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; border-bottom: 1px solid #2b2936; font-size: 12px; color: #918da4;
+}
+.${EXT_PREFIX}-toolbar .sel { display: flex; gap: 10px; }
+.${EXT_PREFIX}-toolbar .sel button {
+  background: none; border: none; color: #91e63e; cursor: pointer; font-size: 12px; padding: 0;
+}
+.${EXT_PREFIX}-toolbar .sel button:hover { text-decoration: underline; }
 .${EXT_PREFIX}-fields { overflow-y: auto; padding: 8px 10px; flex: 1; }
+.${EXT_PREFIX}-group { font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  color: #6f6b80; font-weight: 700; padding: 8px 6px 3px; }
 .${EXT_PREFIX}-row {
   display: grid; grid-template-columns: 18px 1fr; gap: 8px;
   padding: 8px 6px; border-radius: 9px; align-items: start;
@@ -58,12 +69,17 @@ const CSS = `
 .${EXT_PREFIX}-row:hover { background: #201e29; }
 .${EXT_PREFIX}-row input[type=checkbox] { margin-top: 5px; accent-color: #91e63e; }
 .${EXT_PREFIX}-row .meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
-.${EXT_PREFIX}-row .lbl { font-size: 12px; font-weight: 600; color: #cfcbe0; }
-.${EXT_PREFIX}-row .kind {
-  font-size: 10px; background: #2c2a38; color: #91e63e; padding: 1.5px 7px;
-  border-radius: 999px; border: none; cursor: pointer;
+.${EXT_PREFIX}-row .lbl { font-size: 12px; font-weight: 600; color: #cfcbe0; flex: 1; }
+.${EXT_PREFIX}-row select.kind {
+  font-size: 10px; background: #2c2a38; color: #91e63e; padding: 2px 6px;
+  border-radius: 999px; border: 1px solid #3a3846; cursor: pointer; max-width: 130px;
 }
-.${EXT_PREFIX}-row .conf-low { color: #f0b35f; }
+.${EXT_PREFIX}-row select.kind.conf-low { color: #f0b35f; border-color: #6b5a30; }
+.${EXT_PREFIX}-row .save {
+  background: none; border: none; color: #918da4; cursor: pointer; font-size: 13px;
+  padding: 0 2px; opacity: .7;
+}
+.${EXT_PREFIX}-row .save:hover { opacity: 1; color: #91e63e; }
 .${EXT_PREFIX}-row input[type=text] {
   width: 100%; background: #23212c; color: #f0eef8; border: 1px solid #3a3846;
   border-radius: 8px; padding: 6px 9px; font-size: 12.5px;
@@ -99,6 +115,7 @@ export interface UICallbacks {
   onFill: (fieldIds: string[], overrides: Record<string, string>, profileId: string) => void;
   onProfileChange: (profileId: string) => void;
   onKindCorrected: (fieldId: string, kind: FieldKind) => void;
+  onSaveField: (kind: FieldKind, customKey: string | undefined, value: string) => void;
   onDismissFab: () => void;
 }
 
@@ -178,6 +195,27 @@ export class ContentUI {
       panel.appendChild(bar);
     }
 
+    const inputs = new Map<string, { check: HTMLInputElement; value: HTMLInputElement }>();
+
+    // Select all / none toolbar.
+    if (fillable.length) {
+      const toolbar = document.createElement('div');
+      toolbar.className = `${EXT_PREFIX}-toolbar`;
+      const count = document.createElement('span');
+      count.textContent = `${fillable.length} field${fillable.length === 1 ? '' : 's'} ready`;
+      const sel = document.createElement('div');
+      sel.className = 'sel';
+      const all = document.createElement('button');
+      all.textContent = 'Select all';
+      all.addEventListener('click', () => inputs.forEach((v) => (v.check.checked = true)));
+      const none = document.createElement('button');
+      none.textContent = 'None';
+      none.addEventListener('click', () => inputs.forEach((v) => (v.check.checked = false)));
+      sel.append(all, none);
+      toolbar.append(count, sel);
+      panel.appendChild(toolbar);
+    }
+
     const list = document.createElement('div');
     list.className = `${EXT_PREFIX}-fields`;
 
@@ -190,47 +228,24 @@ export class ContentUI {
       list.appendChild(note);
     }
 
-    const inputs = new Map<string, { check: HTMLInputElement; value: HTMLInputElement }>();
-
+    // Group rows under their section headings (falls back to "Fields").
+    const groups = new Map<string, DetectedFieldInfo[]>();
     for (const f of fillable) {
-      const row = document.createElement('div');
-      row.className = `${EXT_PREFIX}-row`;
+      const key = (f.section && f.section.trim()) || 'Fields';
+      (groups.get(key) ?? groups.set(key, []).get(key)!).push(f);
+    }
+    const showGroups = groups.size > 1;
 
-      const check = document.createElement('input');
-      check.type = 'checkbox';
-      check.checked = true;
-
-      const body = document.createElement('div');
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      const lbl = document.createElement('span');
-      lbl.className = 'lbl';
-      lbl.textContent = f.label || f.signature || '(unnamed field)';
-      const kindBtn = document.createElement('button');
-      kindBtn.className = 'kind' + (f.confidence < 0.6 ? ' conf-low' : '');
-      kindBtn.title = 'Click to correct the field type';
-      kindBtn.textContent = f.kind === 'custom' ? (f.customKey ?? 'custom') : (KIND_LABELS[f.kind] ?? f.kind);
-      kindBtn.addEventListener('click', () => {
-        const kinds = TAXONOMY.map((t) => t.kind);
-        const current = kinds.indexOf(f.kind as (typeof kinds)[number]);
-        const pick = prompt(
-          `Correct field type for "${f.label}".\nOne of: ${kinds.join(', ')}`,
-          current >= 0 ? f.kind : '',
-        );
-        if (pick && kinds.includes(pick as (typeof kinds)[number])) {
-          this.cb.onKindCorrected(f.fieldId, pick as FieldKind);
-        }
-      });
-      meta.append(lbl, kindBtn);
-
-      const valueInput = document.createElement('input');
-      valueInput.type = 'text';
-      valueInput.value = f.proposedValue;
-
-      body.append(meta, valueInput);
-      row.append(check, body);
-      list.appendChild(row);
-      inputs.set(f.fieldId, { check, value: valueInput });
+    for (const [groupName, groupFields] of groups) {
+      if (showGroups) {
+        const gh = document.createElement('div');
+        gh.className = `${EXT_PREFIX}-group`;
+        gh.textContent = groupName;
+        list.appendChild(gh);
+      }
+      for (const f of groupFields) {
+        list.appendChild(this.buildRow(f, inputs));
+      }
     }
     panel.appendChild(list);
 
@@ -262,6 +277,69 @@ export class ContentUI {
     this.root.appendChild(panel);
     this.panel = panel;
     this.hideFab();
+  }
+
+  /** Build one review row (checkbox, label, type dropdown, save, value input). */
+  private buildRow(
+    f: DetectedFieldInfo,
+    inputs: Map<string, { check: HTMLInputElement; value: HTMLInputElement }>,
+  ): HTMLDivElement {
+    const row = document.createElement('div');
+    row.className = `${EXT_PREFIX}-row`;
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = true;
+
+    const body = document.createElement('div');
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const lbl = document.createElement('span');
+    lbl.className = 'lbl';
+    lbl.textContent = f.label || f.signature || '(unnamed field)';
+
+    // Inline field-type dropdown (replaces the old prompt-based correction).
+    const kindSel = document.createElement('select');
+    kindSel.className = 'kind' + (f.confidence < 0.6 ? ' conf-low' : '');
+    kindSel.title = 'Field type — change it to correct the match (the extension learns).';
+    if (f.kind === 'custom') {
+      const opt = document.createElement('option');
+      opt.value = 'custom';
+      opt.textContent = f.customKey ?? 'custom';
+      opt.selected = true;
+      kindSel.appendChild(opt);
+    }
+    for (const t of TAXONOMY) {
+      const opt = document.createElement('option');
+      opt.value = t.kind;
+      opt.textContent = t.label;
+      if (f.kind === t.kind) opt.selected = true;
+      kindSel.appendChild(opt);
+    }
+    kindSel.addEventListener('change', () => {
+      if (kindSel.value && kindSel.value !== 'custom') {
+        this.cb.onKindCorrected(f.fieldId, kindSel.value as FieldKind);
+      }
+    });
+
+    const valueInput = document.createElement('input');
+    valueInput.type = 'text';
+    valueInput.value = f.proposedValue;
+
+    const save = document.createElement('button');
+    save.className = 'save';
+    save.title = 'Save this value to your profile';
+    save.textContent = '💾';
+    save.addEventListener('click', () => {
+      const v = valueInput.value.trim();
+      if (v) this.cb.onSaveField(f.kind, f.customKey, v);
+    });
+
+    meta.append(lbl, kindSel, save);
+    body.append(meta, valueInput);
+    row.append(check, body);
+    inputs.set(f.fieldId, { check, value: valueInput });
+    return row;
   }
 
   closePanel(): void {

@@ -3,8 +3,8 @@
  * recents, import/export, and links into the options dashboard.
  */
 import { useEffect, useState } from 'react';
-import type { Profile, RecentForm, DetectionSummary, Settings } from '@/shared/types';
-import { getProfiles, getSettings, saveSettings, getRecentForms } from '@/services/storage';
+import type { Profile, RecentForm, DetectionSummary, Settings, SiteRuleMode, FillStats } from '@/shared/types';
+import { getProfiles, getSettings, saveSettings, getRecentForms, getStats } from '@/services/storage';
 import { getActiveTab, sendToTab } from '@/shared/messaging';
 import { useTheme } from '@/ui/useTheme';
 import { downloadBackup, pickAndImportBackup } from '@/ui/backup';
@@ -61,6 +61,7 @@ export function Popup() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [activeProfileId, setActiveProfileId] = useState('');
   const [recents, setRecents] = useState<RecentForm[]>([]);
+  const [stats, setStats] = useState<FillStats | null>(null);
   const [detected, setDetected] = useState<number | null>(null);
   const [hostname, setHostname] = useState('');
   const [status, setStatus] = useState<Status>(null);
@@ -68,12 +69,13 @@ export function Popup() {
 
   useEffect(() => {
     void (async () => {
-      const [p, s, r, tab] = await Promise.all([
-        getProfiles(), getSettings(), getRecentForms(), getActiveTab(),
+      const [p, s, r, st, tab] = await Promise.all([
+        getProfiles(), getSettings(), getRecentForms(), getStats(), getActiveTab(),
       ]);
       setProfiles(p);
       setSettings(s);
       setRecents(r);
+      setStats(st);
       let host = '';
       if (tab?.url) {
         try { host = new URL(tab.url).hostname; } catch { /* chrome:// etc. */ }
@@ -98,6 +100,16 @@ export function Popup() {
     const next = { ...settings };
     if (hostname) next.siteProfiles = { ...next.siteProfiles, [hostname]: id };
     else next.defaultProfileId = id;
+    setSettings(next);
+    await saveSettings(next);
+  };
+
+  const setSiteRule = async (mode: SiteRuleMode | '') => {
+    if (!settings || !hostname) return;
+    const siteRules = { ...settings.siteRules };
+    if (mode) siteRules[hostname] = mode;
+    else delete siteRules[hostname];
+    const next = { ...settings, siteRules };
     setSettings(next);
     await saveSettings(next);
   };
@@ -182,6 +194,21 @@ export function Popup() {
         </div>
       )}
 
+      {hostname && settings && (
+        <div className="pp-siterule">
+          <span className="muted">On {hostname}:</span>
+          <select
+            value={settings.siteRules?.[hostname] ?? ''}
+            onChange={(e) => void setSiteRule(e.target.value as SiteRuleMode | '')}
+          >
+            <option value="">Default behavior</option>
+            <option value="auto">Auto-fill (skip review)</option>
+            <option value="review">Always review first</option>
+            <option value="off">Disable here</option>
+          </select>
+        </div>
+      )}
+
       <div className="pp-actions">
         <button className="big primary" disabled={busy || !profiles.length} onClick={() => void autofill()}>
           ⚡ Autofill Current Page
@@ -193,6 +220,13 @@ export function Popup() {
       </div>
 
       {status && <div className={`pp-status ${status.kind}`}>{status.text}</div>}
+
+      {stats && stats.totalFilled > 0 && (
+        <div className="pp-stats" title="Counted locally on this device">
+          ⚡ <b>{stats.totalFilled.toLocaleString()}</b> fields filled across{' '}
+          <b>{stats.totalForms.toLocaleString()}</b> forms
+        </div>
+      )}
 
       {recents.length > 0 && (
         <div className="pp-section">
